@@ -47,3 +47,6 @@ https://pypi.python.org/pypi/miflora
 
 It also builds on the original domoticz script created by Tristan:<br/>
 https://github.com/Tristan79/miflora
+
+Build from flatsiedatsie.<br/>
+https://github.com/flatsiedatsie/Mi_Flower_mate_plugin
