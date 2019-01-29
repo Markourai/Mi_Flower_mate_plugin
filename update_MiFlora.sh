@@ -1,26 +1,7 @@
 #!/bin/bash
-cd "$(dirname "$0")"
-
-while read -r prefix val; do
-    case "$prefix" in
-        FW:) fw=$val ;;
-        Name:) name=$val ;;
-        Temperature:) temp=$val ;;
-        Moisture:) mt=$val ;;
-        Light:) lt=$val ;;
-        Conductivity:) ct=$val ;;
-        Battery:) bt=$val ;;
-    esac
-done < <(sudo python3 demo.py --backend bluepy poll $1)
-
-#moisture
-curl "http://localhost:8080/json.htm?type=command&param=udevice&idx=$2&nvalue=0&svalue=$mt&battery=$bt"
-
-#temperature
-curl "http://localhost:8080/json.htm?type=command&param=udevice&idx=$3&nvalue=0&svalue=$temp&battery=$bt"
-
-#light
-curl "http://localhost:8080/json.htm?type=command&param=udevice&idx=$4&svalue=$lt&battery=$bt"
-
-#conductivity
-curl "http://localhost:8080/json.htm?type=command&param=udevice&idx=$5&nvalue=0&svalue=$ct&battery=$bt"
+# Miflora Pointsettia
+python3 update_MiFlora.py -a "C4:7C:8D:67:4B:28" -m "117" -t "118" -l "119" -f "120" -c "Pointsettia" &
+# Miflora Bonsai
+python3 update_MiFlora.py -a "C4:7C:8D:62:47:D0" -m "107" -t "108" -l "109" -f "110" -c "Bonsai" &
+# Miflora Olivier
+python3 update_MiFlora.py -a "C4:7C:8D:62:48:40" -m "121" -t "122" -l "123" -f "124" -c "Olivier" & 
