@@ -1,3 +1,5 @@
+import sys
+import getopt
 import urllib.request
 import base64
 import time
@@ -7,37 +9,31 @@ from miflora.miflora_poller import MiFloraPoller, \
 from miflora.backends.bluepy import BluepyBackend
 from miflora.backends.gatttool import GatttoolBackend
 
-# Settings for the domoticz server
+_debug = 0
 
+# Settings for the domoticz server
 # Forum see: http://domoticz.com/forum/viewtopic.php?f=56&t=13306&hilit=mi+flora&start=20#p105255
 domoticzserver   = "127.0.0.1:8080"
 domoticzusername = "myuser"
 domoticzpassword = "mypassword"
 
-# So id devices use: sudo hcitool lescan
-
-# Sensor IDs
-
-# Create 4 virtual sensors in dummy hardware
-# type temperature
-# type lux
-# type percentage (moisture)
-# type custom (fertility)
-
 base64string = base64.encodestring(('%s:%s' % (domoticzusername, domoticzpassword)).encode()).decode().replace('\n', '')
 
+# Prepare domoticz request with authorization
 def domoticzrequest (url):
   request = urllib.request.Request(url)
   request.add_header("Authorization", "Basic %s" % base64string)
   response = urllib.request.urlopen(request)
   return response.read()
 
-def update(address,idx_moist,idx_temp,idx_lux,idx_cond):
+# Update function to get information
+# Format: address, moist (%), temp (°C), lux, fertility, comment
+def update(address,idx_moist,idx_temp,idx_lux,idx_cond, comment):
 
-    poller = MiFloraPoller(address, GatttoolBackend)
+    print("Begin polling data for: " + address)
+    poller = MiFloraPoller(address, BluepyBackend)
 
     # reading error in poller (happens sometime, you go and bug the original author):
-
     loop = 0
     try:
         temp = poller.parameter_value(MI_TEMPERATURE)
@@ -59,15 +55,16 @@ def update(address,idx_moist,idx_temp,idx_lux,idx_cond):
         return
 
     global domoticzserver
-
-    print("Mi Flora: " + address)
-    print("Firmware: {}".format(poller.firmware_version()))
-    print("Name: {}".format(poller.name()))
-    print("Temperature: {}°C".format(poller.parameter_value(MI_TEMPERATURE)))
-    print("Moisture: {}%".format(poller.parameter_value(MI_MOISTURE)))
-    print("Light: {} lux".format(poller.parameter_value(MI_LIGHT)))
-    print("Fertility: {} uS/cm?".format(poller.parameter_value(MI_CONDUCTIVITY)))
-    print("Battery: {}%".format(poller.parameter_value(MI_BATTERY)))
+    if _debug == 1:
+        print("Plant: " + comment)
+        print("Mi Flora: " + address)
+        print("Firmware: {}".format(poller.firmware_version()))
+        print("Name: {}".format(poller.name()))
+        print("Temperature: {}°C".format(poller.parameter_value(MI_TEMPERATURE)))
+        print("Moisture: {}%".format(poller.parameter_value(MI_MOISTURE)))
+        print("Light: {} lux".format(poller.parameter_value(MI_LIGHT)))
+        print("Fertility: {} uS/cm?".format(poller.parameter_value(MI_CONDUCTIVITY)))
+        print("Battery: {}%".format(poller.parameter_value(MI_BATTERY)))
 
     val_bat  = "{}".format(poller.parameter_value(MI_BATTERY))
 
@@ -88,14 +85,54 @@ def update(address,idx_moist,idx_temp,idx_lux,idx_cond):
     domoticzrequest("http://" + domoticzserver + "/json.htm?type=command&param=udevice&idx=" + idx_cond + "&svalue=" + val_cond + "&battery=" + val_bat)
     time.sleep(1)
 
-# format address, moist (%), temp (°C), lux, fertility
-# Example / test
+def usage():
+  print('Usage: '+sys.argv[0]+' -a <mac-address> -m <moisture-id> -t <temperature-id> -l <lux-id> -f <fertility-id> -c [comment]')
 
-print("\n1: Pointsettia")
-update("C4:7C:8D:67:4B:28","117","118","119","120")
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv, "ha:m:t:l:f:c:d", ["help", "address=", "moisture=", "temp=", "lux=", "fertility=", "comment="])
+    except getopt.GetoptError as err:
+        print(err)
+        usage()
+        sys.exit(2)
 
-print("\n2: Olivier")
-update("C4:7C:8D:62:48:40","121","122","123","124")
+    if len(argv) == 0:
+        print("Missing arguments")
+        usage()
+        sys.exit(2)
 
-print("\n3: Bonsai")
-update("C4:7C:8D:62:47:D0","107","108","109","110")
+    _address = ""
+    _moisture = ""
+    _temp = ""
+    _lux = ""
+    _fertility = ""
+    _comment = ""
+
+    for opt, arg in opts:
+        #print("arg: " + arg + ", opt: " + opt)
+        if opt in ("-h", "--help"):
+            usage()
+            sys.exit()
+        elif opt in ("-d", "--debug"):
+            global _debug
+            _debug = 1
+        elif opt in ("-a", "--address"):
+            _address = arg
+        elif opt in ("-m", "--moisture"):
+            _moisture = arg
+        elif opt in ("-t", "--temp"):
+            _temp = arg
+        elif opt in ("-l", "--lux"):
+            _lux = arg
+        elif opt in ("-f", "--fertility"):
+            _fertility = arg
+        elif opt in ("-c", "--comment"):
+            _comment = arg
+        else:
+            assert False, "Unhandled option"
+    if _debug == 1:
+        print("update of " + _comment + ": " + _address + ", " + _moisture + ", " + _temp + ", " + _lux + ", " + _fertility)
+    update(_address, _moisture, _temp, _lux, _fertility, _comment)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
