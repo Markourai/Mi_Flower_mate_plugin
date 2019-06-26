@@ -46,7 +46,7 @@ def update(address,idx_moist,idx_temp,idx_lux,idx_cond, comment):
         temp = 201
 
     while loop < 2 and temp > 200:
-        logging.warning("Patched: Error reading value retry after 5 seconds...\n")
+        logging.warning("Patched: Error reading value retry after 5 seconds for :" + address)
         time.sleep(5)
         #poller = MiFloraPoller(address, GatttoolBackend)
         loop += 1
@@ -56,7 +56,7 @@ def update(address,idx_moist,idx_temp,idx_lux,idx_cond, comment):
             temp = 201
 
     if temp > 200:
-        logging.error("Patched: Error reading value\n")
+        logging.error("Patched: Error reading value for :" + address")
         return
 
     global domoticzserver
