@@ -1,5 +1,6 @@
 import sys
 import getopt
+import logging
 import urllib.request
 import base64
 import time
@@ -9,6 +10,10 @@ from miflora.miflora_poller import MiFloraPoller, \
 from miflora.backends.bluepy import BluepyBackend
 from miflora.backends.gatttool import GatttoolBackend
 
+logging.basicConfig(filename='/home/pi/domo_flora.log', format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 _debug = 0
 
 # Settings for the domoticz server
@@ -17,7 +22,7 @@ domoticzserver   = "127.0.0.1:8080"
 domoticzusername = "myuser"
 domoticzpassword = "mypassword"
 
-base64string = base64.encodestring(('%s:%s' % (domoticzusername, domoticzpassword)).encode()).decode().replace('\n', '')
+base64string = base64.encodebytes(('%s:%s' % (domoticzusername, domoticzpassword)).encode()).decode().replace('\n', '')
 
 # Prepare domoticz request with authorization
 def domoticzrequest (url):
@@ -30,7 +35,7 @@ def domoticzrequest (url):
 # Format: address, moist (%), temp (°C), lux, fertility, comment
 def update(address,idx_moist,idx_temp,idx_lux,idx_cond, comment):
 
-    print("Begin polling data for: " + address)
+    logging.info("Begin polling data for: " + address)
     poller = MiFloraPoller(address, BluepyBackend)
 
     # reading error in poller (happens sometime, you go and bug the original author):
@@ -41,7 +46,7 @@ def update(address,idx_moist,idx_temp,idx_lux,idx_cond, comment):
         temp = 201
 
     while loop < 2 and temp > 200:
-        print("Patched: Error reading value retry after 5 seconds...\n")
+        logging.warning("Patched: Error reading value retry after 5 seconds...\n")
         time.sleep(5)
         #poller = MiFloraPoller(address, GatttoolBackend)
         loop += 1
@@ -51,20 +56,20 @@ def update(address,idx_moist,idx_temp,idx_lux,idx_cond, comment):
             temp = 201
 
     if temp > 200:
-        print("Patched: Error reading value\n")
+        logging.error("Patched: Error reading value\n")
         return
 
     global domoticzserver
     if _debug == 1:
-        print("Plant: " + comment)
-        print("Mi Flora: " + address)
-        print("Firmware: {}".format(poller.firmware_version()))
-        print("Name: {}".format(poller.name()))
-        print("Temperature: {}°C".format(poller.parameter_value(MI_TEMPERATURE)))
-        print("Moisture: {}%".format(poller.parameter_value(MI_MOISTURE)))
-        print("Light: {} lux".format(poller.parameter_value(MI_LIGHT)))
-        print("Fertility: {} uS/cm?".format(poller.parameter_value(MI_CONDUCTIVITY)))
-        print("Battery: {}%".format(poller.parameter_value(MI_BATTERY)))
+        logging.debug("Plant: " + comment)
+        logging.debug("Mi Flora: " + address)
+        logging.debug("Firmware: {}".format(poller.firmware_version()))
+        logging.debug("Name: {}".format(poller.name()))
+        logging.debug("Temperature: {}°C".format(poller.parameter_value(MI_TEMPERATURE)))
+        logging.debug("Moisture: {}%".format(poller.parameter_value(MI_MOISTURE)))
+        logging.debug("Light: {} lux".format(poller.parameter_value(MI_LIGHT)))
+        logging.debug("Fertility: {} uS/cm?".format(poller.parameter_value(MI_CONDUCTIVITY)))
+        logging.debug("Battery: {}%".format(poller.parameter_value(MI_BATTERY)))
 
     val_bat  = "{}".format(poller.parameter_value(MI_BATTERY))
 
@@ -131,7 +136,7 @@ def main(argv):
         else:
             assert False, "Unhandled option"
     if _debug == 1:
-        print("update of " + _comment + ": " + _address + ", " + _moisture + ", " + _temp + ", " + _lux + ", " + _fertility)
+        logging.debug("update of " + _comment + ": " + _address + ", " + _moisture + ", " + _temp + ", " + _lux + ", " + _fertility)
     update(_address, _moisture, _temp, _lux, _fertility, _comment)
 
 if __name__ == "__main__":
