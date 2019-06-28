@@ -56,7 +56,7 @@ def update(address,idx_moist,idx_temp,idx_lux,idx_cond, comment):
             temp = 201
 
     if temp > 200:
-        logging.error("Patched: Error reading value for :" + address")
+        logging.error("Patched: Error reading value for :" + address)
         return
 
     global domoticzserver
