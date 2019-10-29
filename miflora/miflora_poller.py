@@ -5,6 +5,7 @@ Read data from Mi Flora plant sensor.
 from datetime import datetime, timedelta
 import time
 from struct import unpack
+import logging
 from threading import Lock
 from miflora.backends import BluetoothInterface, BluetoothBackendException
 
@@ -20,7 +21,6 @@ MI_MOISTURE = "moisture"
 MI_CONDUCTIVITY = "conductivity"
 MI_BATTERY = "battery"
 
-import logging
 _LOGGER = logging.getLogger(__name__)
 
 BYTEORDER = 'little'
@@ -39,7 +39,15 @@ _INVALID_HISTORY_DATA = [
     b'\xaa\xbb\xcc\xdd\xee\xff\x99\x88\x77\x66\x55\x44\x33\x22\x11\x10',
 ]
 
-class MiFloraPoller(object):
+
+def format_bytes(raw_data):
+    """Prettyprint a byte array."""
+    if raw_data is None:
+        return 'None'
+    return ' '.join([format(c, "02x") for c in raw_data]).upper()
+
+
+class MiFloraPoller:
     """"
     A class to read data from Mi Flora plant sensors.
     """
@@ -50,7 +58,7 @@ class MiFloraPoller(object):
         """
 
         self._mac = mac
-        self._bt_interface = BluetoothInterface(backend, adapter)
+        self._bt_interface = BluetoothInterface(backend, adapter=adapter)
         self._cache = None
         self._cache_timeout = timedelta(seconds=cache_timeout)
         self._last_read = None
@@ -93,7 +101,7 @@ class MiFloraPoller(object):
                     return
             self._cache = connection.read_handle(_HANDLE_READ_SENSOR_DATA)  # pylint: disable=no-member
             _LOGGER.debug('Received result for handle %s: %s',
-                          _HANDLE_READ_SENSOR_DATA, self._format_bytes(self._cache))
+                          _HANDLE_READ_SENSOR_DATA, format_bytes(self._cache))
             self._check_data()
             if self.cache_available():
                 self._last_read = datetime.now()
@@ -119,7 +127,7 @@ class MiFloraPoller(object):
             with self._bt_interface.connect(self._mac) as connection:
                 res = connection.read_handle(_HANDLE_READ_VERSION_BATTERY)  # pylint: disable=no-member
                 _LOGGER.debug('Received result for handle %s: %s',
-                              _HANDLE_READ_VERSION_BATTERY, self._format_bytes(res))
+                              _HANDLE_READ_VERSION_BATTERY, format_bytes(res))
             if res is None:
                 self.battery = 0
                 self._firmware_version = None
@@ -156,10 +164,8 @@ class MiFloraPoller(object):
         if self.cache_available() and (self.is_ropot()):
             if parameter == MI_LIGHT:
                 return False
-            else:
-                return self._parse_data()[parameter]
-        else:
-            raise BluetoothBackendException("Could not read data from Mi Flora sensor %s" % self._mac)
+            return self._parse_data()[parameter]
+        raise BluetoothBackendException("Could not read data from Mi Flora sensor %s" % self._mac)
 
     def _check_data(self):
         """Ensure that the data in the cache is valid.
@@ -217,13 +223,6 @@ class MiFloraPoller(object):
         res[MI_TEMPERATURE] = temp/10.0
         return res
 
-    @staticmethod
-    def _format_bytes(raw_data):
-        """Prettyprint a byte array."""
-        if raw_data is None:
-            return 'None'
-        return ' '.join([format(c, "02x") for c in raw_data]).upper()
-
     def fetch_history(self):
         """Fetch the historical measurements from the sensor.
 
@@ -231,31 +230,32 @@ class MiFloraPoller(object):
         """
         data = []
         with self._bt_interface.connect(self._mac) as connection:
-            connection.write_handle(_HANDLE_HISTORY_CONTROL, _CMD_HISTORY_READ_INIT)
-            history_info = connection.read_handle(_HANDLE_HISTORY_READ)
-            _LOGGER.debug('history info raw: %s', MiFloraPoller._format_bytes(history_info))
+            connection.write_handle(_HANDLE_HISTORY_CONTROL, _CMD_HISTORY_READ_INIT)  # pylint: disable=no-member
+            history_info = connection.read_handle(_HANDLE_HISTORY_READ)  # pylint: disable=no-member
+            _LOGGER.debug('history info raw: %s', format_bytes(history_info))
 
             history_length = int.from_bytes(history_info[0:2], BYTEORDER)
-            _LOGGER.debug("Getting %d measurements", history_length)
+            _LOGGER.info("Getting %d measurements", history_length)
             if history_length > 0:
                 for i in range(history_length):
                     payload = self._cmd_history_address(i)
                     try:
-                        connection.write_handle(_HANDLE_HISTORY_CONTROL, payload)
-                        response = connection.read_handle(_HANDLE_HISTORY_READ)
+                        connection.write_handle(_HANDLE_HISTORY_CONTROL, payload)  # pylint: disable=no-member
+                        response = connection.read_handle(_HANDLE_HISTORY_READ)  # pylint: disable=no-member
                         if response in _INVALID_HISTORY_DATA:
                             msg = 'Got invalid history data: {}'.format(response)
-                            _LOGGER.debug(msg)
+                            _LOGGER.error(msg)
                         else:
                             data.append(HistoryEntry(response))
-                    except Exception as exception:
+                    except Exception:  # pylint: disable=broad-except
+                        # find a more narrow exception here
                         # when reading fails, we're probably at the end of the history
                         # even when the history_length might suggest something else
-                        _LOGGER.debug("Could only retrieve %d of %d entries from the history. "
+                        _LOGGER.error("Could only retrieve %d of %d entries from the history. "
                                       "The rest is not readable", i, history_length)
                         # connection.write_handle(_HANDLE_HISTORY_CONTROL, _CMD_HISTORY_READ_FAILED)
                         break
-                    _LOGGER.debug("Progress: reading entry %d of %d", i+1, history_length)
+                    _LOGGER.info("Progress: reading entry %d of %d", i+1, history_length)
 
         (device_time, wall_time) = self._fetch_device_time()
         time_diff = wall_time - device_time
@@ -271,7 +271,8 @@ class MiFloraPoller(object):
         Note: The data is deleted from the device. There is no way to recover it!
         """
         with self._bt_interface.connect(self._mac) as connection:
-            connection.write_handle(_HANDLE_HISTORY_CONTROL, _CMD_HISTORY_READ_SUCCESS)
+            connection.write_handle(_HANDLE_HISTORY_CONTROL, _CMD_HISTORY_READ_INIT)  # pylint: disable=no-member
+            connection.write_handle(_HANDLE_HISTORY_CONTROL, _CMD_HISTORY_READ_SUCCESS)  # pylint: disable=no-member
 
     @staticmethod
     def _cmd_history_address(addr):
@@ -285,15 +286,16 @@ class MiFloraPoller(object):
         """
         start = time.time()
         with self._bt_interface.connect(self._mac) as connection:
-            response = connection.read_handle(_HANDLE_DEVICE_TIME)
+            response = connection.read_handle(_HANDLE_DEVICE_TIME)  # pylint: disable=no-member
         _LOGGER.debug("device time raw: %s", response)
         wall_time = (time.time() + start) / 2
         device_time = int.from_bytes(response, BYTEORDER)
-        _LOGGER.debug('device time: %s local time: %s', device_time, wall_time)
+        _LOGGER.info('device time: %s local time: %s', device_time, wall_time)
 
         return device_time, wall_time
 
-class HistoryEntry(object):
+
+class HistoryEntry:  # pylint: disable=too-few-public-methods
     """Entry in the history of the device."""
 
     def __init__(self, byte_array):
@@ -320,7 +322,7 @@ class HistoryEntry(object):
         (self.moisture,) = byte_array[11],
         self.conductivity = int.from_bytes(byte_array[12:14], BYTEORDER)
 
-        _LOGGER.debug('Raw data for char 0x3c: %s', MiFloraPoller._format_bytes(byte_array))
+        _LOGGER.debug('Raw data for char 0x3c: %s', format_bytes(byte_array))
         _LOGGER.debug('device time: %d', self.device_time)
         _LOGGER.debug('temp: %f', self.temperature)
         _LOGGER.debug('brightness: %d', self.light)
@@ -330,5 +332,3 @@ class HistoryEntry(object):
     def compute_wall_time(self, time_diff):
         """Correct the device time to the wall time. """
         self.wall_time = datetime.fromtimestamp(self.device_time + time_diff)
-
-
