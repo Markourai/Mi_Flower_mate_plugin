@@ -6,7 +6,9 @@ import re
 import logging
 import sys
 
-from btlewrap import available_backends, BluepyBackend, GatttoolBackend, PygattBackend
+from miflora.backends.bluepy import BluepyBackend
+from miflora.backends.gatttool import GatttoolBackend
+from miflora.backends.pygatt import PygattBackend
 
 from miflora.miflora_poller import MiFloraPoller, \
     MI_CONDUCTIVITY, MI_MOISTURE, MI_LIGHT, MI_TEMPERATURE, MI_BATTERY
